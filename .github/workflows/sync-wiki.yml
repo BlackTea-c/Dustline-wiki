@@ -1,0 +1,40 @@
+name: 同步词条评论区
+on:
+  push:
+    branches: [main]
+    paths: [data/entries.json, scripts/**, src/**, .github/workflows/sync-wiki.yml]
+  issue_comment:
+    types: [created, edited, deleted]
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: dustline-wiki-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.repository == 'BlackTea-c/Dustline-wiki'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 同步评论区与计数
+        run: node scripts/sync-discussions.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 构建可导入脚本
+        run: node scripts/build.mjs
+      - name: 保存更新
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/discussions.json dist/
+          if ! git diff --cached --quiet; then
+            git commit -m "Update Wiki discussion map and script build"
+            git push origin HEAD:main
+          fi
