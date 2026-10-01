@@ -299,7 +299,10 @@
             '.csmg-wiki-choice { border-color:rgba(242,234,216,.14); background:rgba(255,255,255,.03); }',
             '.csmg-wiki-choice:hover { border-color:rgba(228,200,120,.44); background:rgba(228,200,120,.08); }',
             '.csmg-wiki-community { margin-top:1.25rem; border:1px solid #9ed8cf33; border-radius:10px; background:#9ed8cf06; font-size:12px; line-height:1.7; }',
-            '.csmg-wiki-community > summary { padding:.85rem 1rem; color:#9ed8cf; cursor:pointer; font-weight:500; }',
+            '.csmg-wiki-community > summary { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.85rem 1rem; color:#9ed8cf; cursor:pointer; font-weight:500; list-style:none; }',
+            '.csmg-wiki-community > summary::-webkit-details-marker { display:none; }',
+            '.csmg-wiki-community > summary::marker { content:""; }',
+            '.csmg-wiki-community-state { flex-shrink:0; color:#aaa08c; font-size:11px; }',
             '.csmg-wiki-community-panel { padding:0 1rem 1rem; }',
             '.csmg-wiki-comment-list { display:grid; gap:.7rem; }',
             '.csmg-wiki-comment { padding:.85rem; border:1px solid #f2ead814; border-radius:8px; background:#070a0866; }',
@@ -310,6 +313,12 @@
             '.csmg-wiki-action { appearance:none; display:inline-flex; padding:.5rem .75rem; border:1px solid #e4c87866; border-radius:7px; color:#e4c878 !important; background:#e4c87809 !important; font:inherit; text-decoration:none; cursor:pointer; }',
             '.csmg-wiki-action:disabled { opacity:.5; cursor:default; } .csmg-wiki-action[hidden] { display:none; }',
             '.csmg-wiki-community summary:focus-visible,.csmg-wiki-action:focus-visible { outline:2px solid #9ed8cf; outline-offset:3px; }',
+            '.' + POPOVER_CLASS + ' .csmg-wiki-community { margin-top:.75rem; border-radius:8px; }',
+            '.' + POPOVER_CLASS + ' .csmg-wiki-community > summary { padding:.6rem .65rem; font-size:12px; }',
+            '.' + POPOVER_CLASS + ' .csmg-wiki-community-panel { max-height:min(38dvh,18rem); overflow:auto; overscroll-behavior:contain; padding:0 .65rem .65rem; }',
+            '.' + POPOVER_CLASS + ' .csmg-wiki-note { font-size:11px; }',
+            '.' + POPOVER_CLASS + ' .csmg-wiki-comment { padding:.6rem; }',
+            '.' + POPOVER_CLASS + ' .csmg-wiki-action { padding:.35rem .5rem; font-size:11px; }',
         ].join('\n');
         hostDocument.head.append(style);
     }
@@ -471,6 +480,7 @@
                 renderEntry(selectedEntry, index, indexId);
             });
             popover.append(action);
+            attachCommunity(popover, selectedEntry, indexId);
         }
 
         (modal?.classList.contains('open') ? modal : hostDocument.body).append(popover);
@@ -495,8 +505,9 @@
         }
     }
 
-    function onPopoverViewportChange() {
+    function onPopoverViewportChange(event) {
         if (!popover) return;
+        if (event?.type === 'scroll' && popover.contains(event.target)) return;
         if (!popoverAnchor?.isConnected) {
             closePopover();
             return;
@@ -677,12 +688,20 @@
     }
 
     function attachCommunity(card, entry, indexId) {
+        const compact = card.classList.contains(POPOVER_CLASS);
         const section = node('details', 'csmg-wiki-community');
-        const summary = node('summary', '', '玩家补充与吐槽 · 展开查看');
-        const knownCount = entry.discussion?.comment_count;
-        if (Number.isInteger(knownCount)) summary.textContent = '玩家补充与吐槽（' + knownCount + '）· 展开查看';
+        const summary = node('summary');
+        const label = node('span');
+        const state = node('span', 'csmg-wiki-community-state');
+        let commentCount = Number.isInteger(entry.discussion?.comment_count) ? entry.discussion.comment_count : null;
+        function updateSummary() {
+            label.textContent = (compact ? '玩家评论' : '玩家补充与吐槽') + (commentCount === null ? '' : '（' + commentCount + '）');
+            state.textContent = section.open ? '收起 ▴' : '展开 ▾';
+        }
+        summary.append(label, state);
+        updateSummary();
         const panel = node('div', 'csmg-wiki-community-panel');
-        const note = node('p', 'csmg-wiki-note', '以下为玩家观点，可能含剧透；不会用于正文匹配或作者资料。发表需登录 GitHub。');
+        const note = node('p', 'csmg-wiki-note', compact ? '玩家观点，可能含剧透。发表需登录 GitHub。' : '以下为玩家观点，可能含剧透；不会用于正文匹配或作者资料。发表需登录 GitHub。');
         const status = node('p', 'csmg-wiki-note');
         status.setAttribute('role', 'status');
         const list = node('div', 'csmg-wiki-comment-list');
@@ -702,6 +721,9 @@
         let thread, page = 1, loading = false, loaded = false;
         const seen = new Set();
         const isCurrent = () => !stopped && section.isConnected && sequence === dialogSequence;
+        const updateLayout = () => {
+            if (isCurrent() && compact && card === popover) positionPopover(popoverAnchor);
+        };
 
         async function loadComments(reset) {
             if (loading || !isCurrent()) return;
@@ -735,15 +757,20 @@
                     if (link) article.append(link);
                     list.append(article);
                 }
-                summary.textContent = '玩家补充与吐槽（' + Math.max(Number(thread.comment_count) || 0, seen.size) + '）';
+                commentCount = Math.max(Number(thread.comment_count) || 0, seen.size);
+                updateSummary();
                 status.textContent = seen.size ? '已显示 ' + seen.size + ' 条评论。登录 GitHub 可发表。' : '还没有评论；登录 GitHub 后可发表。';
                 page += 1; loaded = true; more.hidden = comments.length < 30;
             } catch (error) {
                 if (isCurrent()) status.textContent = error.message + ' 点击“刷新评论”重试。';
-            } finally { loading = false; refresh.disabled = false; more.disabled = false; }
+            } finally { loading = false; refresh.disabled = false; more.disabled = false; updateLayout(); }
         }
 
-        section.addEventListener('toggle', () => { if (section.open && !loaded) void loadComments(true); });
+        section.addEventListener('toggle', () => {
+            updateSummary();
+            if (section.open && !loaded) void loadComments(true);
+            updateLayout();
+        });
     }
 
     function openAbout() {
