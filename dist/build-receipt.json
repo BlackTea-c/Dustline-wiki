@@ -3,7 +3,7 @@
   "delivery_mode": "component",
   "script_id": "71e0f0cb-1b6d-4e13-a8b8-41c9b6c7a73f",
   "articles": 132,
-  "js_sha256": "2600e40c74c4b20f3c7145688a381e9cfc96ef6b964e2134306bdeeddb0e9882",
+  "js_sha256": "9f16dfef306187ee74fc29d3ae6a05833191883feeade0083e7fd6bc4e028ca2",
   "source": "data/entries.json",
   "real_host_checked": false
 }
