@@ -4,7 +4,7 @@
   "name": "尘世命轨·正文词条维基",
   "id": "71e0f0cb-1b6d-4e13-a8b8-41c9b6c7a73f",
   "content": "",
-  "info": "尘世命轨专用 Wiki：作者公开资料来自 BlackTea-c/Dustline-wiki；只匹配词条标题。玩家评论默认折叠，登录 GitHub 后可发表。",
+  "info": "尘世命轨专用 Wiki：作者公开资料来自 BlackTea-c/Dustline-wiki；只匹配词条标题。玩家评论默认折叠，登录 GitHub 后可发表。点“词条样式”可切换双线描金、淡金底纹、边框标签，选择保存在当前浏览器。",
   "button": {
     "enabled": true,
     "buttons": [
@@ -18,6 +18,10 @@
       },
       {
         "name": "Wiki资料",
+        "visible": true
+      },
+      {
+        "name": "词条样式",
         "visible": true
       }
     ]

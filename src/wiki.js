@@ -6,6 +6,12 @@
     const RAW_BASE = 'https://raw.githubusercontent.com/' + REPOSITORY + '/main/';
     const API_BASE = 'https://api.github.com/repos/' + REPOSITORY;
     const CACHE_KEY = 'dustline-wiki:public-data:v1';
+    const TERM_STYLE_KEY = 'dustline-wiki:term-style:v1';
+    const TERM_STYLES = [
+        { id: 'double', name: '双线描金', description: '金色双下划线，保留正文的紧凑排版。' },
+        { id: 'highlight', name: '淡金底纹', description: '浅金底色配底部金线，更容易从正文中找到词条。' },
+        { id: 'tag', name: '边框标签', description: '金色细边框，词条看起来像可点击的标签。' },
+    ];
     const BUNDLED_DATA = __BUNDLED_DATA__;
     const LINK_CLASS = 'csmg-wiki-link';
     const POPOVER_CLASS = 'csmg-wiki-popover';
@@ -16,6 +22,7 @@
     const PREVIEW_BUTTON = '预览词条';
     const REFRESH_BUTTON = '刷新词条';
     const ABOUT_BUTTON = 'Wiki资料';
+    const TERM_STYLE_BUTTON = '词条样式';
     const hostWindow = window.parent;
     const hostDocument = hostWindow.document;
     const demoEntries = BUNDLED_DATA.entries.filter(entry => ['李沐子', '夜色', '天衡集团', '蓬莱岛', '地球李家'].includes(entry.title));
@@ -33,13 +40,26 @@
     let popover;
     let popoverAnchor;
     let dialogSequence = 0;
+    const savedTermStyle = readLocal(TERM_STYLE_KEY);
+    let termStyle = TERM_STYLES.some(style => style.id === savedTermStyle) ? savedTermStyle : 'highlight';
 
     function readLocal(key) {
         try { return JSON.parse(hostWindow.localStorage.getItem(key) || 'null'); } catch { return null; }
     }
 
     function writeLocal(key, value) {
-        try { hostWindow.localStorage.setItem(key, JSON.stringify(value)); } catch { /* 禁用存储时本次仍可使用。 */ }
+        try { hostWindow.localStorage.setItem(key, JSON.stringify(value)); return true; }
+        catch { return false; /* 禁用存储时本次仍可使用。 */ }
+    }
+
+    function applyTermStyle(styleId) {
+        if (!TERM_STYLES.some(style => style.id === styleId)) return false;
+        termStyle = styleId;
+        hostDocument.querySelectorAll(`.${LINK_CLASS}`).forEach(link => {
+            link.dataset.csmgWikiStyle = termStyle;
+        });
+        if (popover && popoverAnchor?.isConnected) positionPopover(popoverAnchor);
+        return writeLocal(TERM_STYLE_KEY, termStyle);
     }
 
     function notify(message) {
@@ -170,6 +190,7 @@
                     const link = hostDocument.createElement('button');
                     link.type = 'button';
                     link.className = LINK_CLASS;
+                    link.dataset.csmgWikiStyle = termStyle;
                     link.dataset.csmgWikiIndex = indexId;
                     link.dataset.csmgWikiIds = JSON.stringify(ids);
                     link.textContent = label;
@@ -222,13 +243,29 @@
         const style = hostDocument.createElement('style');
         style.id = STYLE_ID;
         style.textContent = `
-            .${LINK_CLASS} {
-                appearance: none; display: inline; padding: 0; margin: 0; border: 0;
-                border-bottom: 1px dotted #e4c878; border-radius: 0; background: transparent;
-                color: inherit; font: inherit; line-height: inherit; cursor: pointer;
+            .${LINK_CLASS}[data-csmg-wiki-style], .csmg-wiki-style-sample {
+                appearance: none; display: inline; padding: 0; margin: 0; border: 0; border-radius: 0;
+                background: transparent; box-shadow: none; text-shadow: none; color: #f3d689 !important;
+                font: inherit; font-weight: 600; line-height: inherit; text-decoration: none; cursor: pointer;
+                -webkit-box-decoration-break: clone; box-decoration-break: clone;
             }
-            .${LINK_CLASS}:hover, .${LINK_CLASS}:focus-visible {
-                color: #f8e8aa; border-bottom-style: solid; outline: none;
+            [data-csmg-wiki-style="double"].${LINK_CLASS}, [data-csmg-wiki-style="double"].csmg-wiki-style-sample {
+                text-decoration-line: underline; text-decoration-style: double; text-decoration-color: #e4c878;
+                text-decoration-thickness: 2px; text-underline-offset: 5px;
+            }
+            [data-csmg-wiki-style="highlight"].${LINK_CLASS}, [data-csmg-wiki-style="highlight"].csmg-wiki-style-sample {
+                padding: 1px 4px; border-radius: 4px; background-color: rgba(228,200,120,.19) !important;
+                box-shadow: inset 0 -2px rgba(228,200,120,.65) !important;
+            }
+            [data-csmg-wiki-style="tag"].${LINK_CLASS}, [data-csmg-wiki-style="tag"].csmg-wiki-style-sample {
+                padding: 0 6px; border: 1px solid #d4b765; border-radius: 6px;
+                background-color: rgba(228,200,120,.08) !important;
+            }
+            .${LINK_CLASS}[data-csmg-wiki-style]:hover, .${LINK_CLASS}[data-csmg-wiki-style]:focus-visible {
+                color: #fff0bd !important; background-color: rgba(228,200,120,.25) !important;
+            }
+            .${LINK_CLASS}[data-csmg-wiki-style]:focus-visible {
+                outline: 2px solid #9ed8cf; outline-offset: 3px;
             }
             .${DIALOG_CLASS} {
                 position: fixed; inset: 0; z-index: 2147483645; display: none;
@@ -250,15 +287,13 @@
             .csmg-wiki-close { flex: 0 0 auto; width: 2rem; height: 2rem; border: 1px solid #ffffff24; border-radius: 50%; color: inherit; background: #ffffff0a; font-size: 1.2rem; cursor: pointer; }
             .csmg-wiki-content { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid rgba(242,234,216,.14); color: #d4d9d4 !important; font-size: 12px; line-height: 1.8; white-space: normal; overflow-wrap: anywhere; }
             .csmg-wiki-content.csmg-wiki-plain { white-space: pre-wrap; }
-            .csmg-wiki-content * { color: inherit !important; background-color: transparent !important; box-shadow: none !important; }
+            .csmg-wiki-content :not(.csmg-wiki-link) { color: inherit !important; background-color: transparent !important; box-shadow: none !important; }
             .csmg-wiki-content > :first-child { margin-top: 0; }
             .csmg-wiki-content > :last-child { margin-bottom: 0; }
             .csmg-wiki-content p { margin: 0 0 .8em; }
             .csmg-wiki-content p:last-child { margin-bottom: 0; }
             .csmg-wiki-content h1, .csmg-wiki-content h2, .csmg-wiki-content h3, .csmg-wiki-content h4 { margin: 1.25em 0 .55em; padding-bottom: .35em; border-bottom: 1px solid rgba(185,154,104,.24); color: #e8d5ad !important; font-size: 1.08em; font-weight: 500; letter-spacing: .025em; }
             .csmg-wiki-content strong, .csmg-wiki-content b { color: #f0dfb7 !important; font-weight: 600; }
-            .csmg-wiki-content .csmg-wiki-link { color: #e4c878 !important; }
-            .csmg-wiki-content .csmg-wiki-link:hover, .csmg-wiki-content .csmg-wiki-link:focus-visible { color: #f8e8aa !important; }
             .csmg-wiki-content ul, .csmg-wiki-content ol { margin: .45em 0 .9em; padding-left: 1.5em; }
             .csmg-wiki-content li { margin: .28em 0; padding-left: .15em; }
             .csmg-wiki-content li::marker { color: #b99a68; }
@@ -275,6 +310,17 @@
             .csmg-wiki-choices { display: grid; gap: .55rem; margin-top: 1.1rem; }
             .csmg-wiki-choice { display: grid; gap: .2rem; padding: .75rem .85rem; border: 1px solid #ffffff1a; border-radius: 8px; color: inherit; text-align: left; background: #ffffff08; cursor: pointer; }
             .csmg-wiki-choice:hover { border-color: #b99a6877; background: #b99a6812; }
+            .csmg-wiki-style-options { display: grid; gap: .75rem; margin-top: 1rem; }
+            .csmg-wiki-style-choice { appearance: none; display: grid; gap: .65rem; width: 100%; padding: 1rem;
+                border: 1px solid #e4c87833; border-radius: 10px; color: #f2ead8; background: #ffffff04;
+                font: inherit; text-align: left; cursor: pointer; }
+            .csmg-wiki-style-choice:hover { border-color: #e4c87888; background: #e4c8780b; }
+            .csmg-wiki-style-choice[aria-pressed="true"] { border-color: #e4c878; background: #e4c87812; }
+            .csmg-wiki-style-choice:focus-visible { outline: 2px solid #9ed8cf; outline-offset: 3px; }
+            .csmg-wiki-style-heading { display: flex; justify-content: space-between; gap: .75rem; color: #e4c878; font-size: 14px; }
+            .csmg-wiki-style-selected { flex-shrink: 0; color: #9ed8cf; font-size: 12px; }
+            .csmg-wiki-style-example { display: block; color: #d4d9d4; font-size: 16px; line-height: 2; }
+            .csmg-wiki-style-description { color: #aaa08c; font-size: 12px; line-height: 1.7; }
         `;
         style.textContent += [
             '.' + POPOVER_CLASS + ' { position:fixed; z-index:2147483646; box-sizing:border-box; width:min(calc(100vw - 1.5rem),17.5rem); max-height:min(calc(100dvh - 1.5rem),24rem); overflow:auto; padding:.9rem; border:1px solid rgba(242,234,216,.18); border-radius:.75rem; color:#f2ead8; background:rgba(18,20,15,.98); box-shadow:0 .875rem 2rem rgba(6,7,4,.36),0 .25rem .75rem rgba(6,7,4,.24); font:12px/1.65 Inter,\"PingFang SC\",\"Microsoft YaHei\",system-ui,sans-serif; }',
@@ -773,6 +819,47 @@
         });
     }
 
+    function openTermStyles() {
+        closePopover();
+        const card = buildCard('词条样式', '选择后立即生效 · 只保存在当前浏览器');
+        card.append(node('p', 'csmg-wiki-note', '三种方案都可随时切换，正文和完整资料中的词条会一起更新。'));
+        const options = node('div', 'csmg-wiki-style-options');
+        options.setAttribute('role', 'group');
+        options.setAttribute('aria-label', '选择词条显示样式');
+        const status = node('p', 'csmg-wiki-note');
+        status.setAttribute('role', 'status');
+        const choices = [];
+        const updateChoices = () => choices.forEach(({ button, selected, style }) => {
+            const active = style.id === termStyle;
+            button.setAttribute('aria-pressed', String(active));
+            selected.textContent = active ? '使用中 ✓' : '点击使用';
+        });
+        for (const style of TERM_STYLES) {
+            const button = node('button', 'csmg-wiki-style-choice');
+            button.type = 'button';
+            button.setAttribute('aria-label', style.name);
+            const heading = node('span', 'csmg-wiki-style-heading');
+            const selected = node('span', 'csmg-wiki-style-selected');
+            heading.append(node('span', '', style.name), selected);
+            const example = node('span', 'csmg-wiki-style-example');
+            const sample = node('span', 'csmg-wiki-style-sample', '玉虚宫');
+            sample.dataset.csmgWikiStyle = style.id;
+            example.append(hostDocument.createTextNode('昆仑山中，'), sample, hostDocument.createTextNode('藏经阁灯火未熄。'));
+            button.append(heading, example, node('span', 'csmg-wiki-style-description', style.description));
+            button.addEventListener('click', () => {
+                const saved = applyTermStyle(style.id);
+                updateChoices();
+                status.textContent = '已切换为“' + style.name + '”。' + (saved ? '下次打开时会沿用这个选择。' : '浏览器限制了保存，本次运行仍可使用。');
+            });
+            choices.push({ button, selected, style });
+            options.append(button);
+        }
+        updateChoices();
+        status.textContent = '当前使用：' + TERM_STYLES.find(style => style.id === termStyle).name + '。';
+        card.append(options, status);
+        setDialogContent(card);
+    }
+
     function openAbout() {
         closePopover();
         const card = buildCard('Wiki资料', '基础资料由作者维护，玩家评论独立展示');
@@ -780,6 +867,8 @@
         const status = node('p', 'csmg-wiki-note', '当前资料：' + dataSource + ' · ' + liveIndex.entries.size + ' 条');
         status.setAttribute('role', 'status');
         card.append(status);
+        const styleButton = actionButton('词条样式', openTermStyles);
+        card.append(styleButton);
         setDialogContent(card);
     }
 
@@ -818,6 +907,9 @@
         closePopover();
         hostDocument.removeEventListener('click', onWikiLinkClick);
         hostWindow.removeEventListener('pagehide', cleanup);
+        hostDocument.getElementById('wiki-preview')?.removeEventListener('click', openPreview);
+        hostDocument.getElementById('wiki-settings')?.removeEventListener('click', openAbout);
+        hostDocument.getElementById('wiki-style')?.removeEventListener('click', openTermStyles);
         hostDocument.querySelectorAll(`.${LINK_CLASS}`).forEach(link => {
             link.replaceWith(hostDocument.createTextNode(link.textContent));
         });
@@ -844,13 +936,16 @@
                 { name: PREVIEW_BUTTON, visible: true },
                 { name: REFRESH_BUTTON, visible: true },
                 { name: ABOUT_BUTTON, visible: true },
+                { name: TERM_STYLE_BUTTON, visible: true },
             ]);
             stops.push(eventOn(getButtonEvent(PREVIEW_BUTTON), openPreview), eventOn(getButtonEvent(REFRESH_BUTTON), refreshFromButton),
-                eventOn(getButtonEvent(ABOUT_BUTTON), openAbout), eventOn(tavern_events.CHARACTER_MESSAGE_RENDERED, enhanceMessage),
+                eventOn(getButtonEvent(ABOUT_BUTTON), openAbout), eventOn(getButtonEvent(TERM_STYLE_BUTTON), openTermStyles),
+                eventOn(tavern_events.CHARACTER_MESSAGE_RENDERED, enhanceMessage),
                 eventOn(tavern_events.MESSAGE_UPDATED, enhanceMessage), eventOn(tavern_events.CHAT_CHANGED, () => { closeDialog(); enhanceAllMessages(); }));
         } else {
             hostDocument.getElementById('wiki-preview')?.addEventListener('click', openPreview);
             hostDocument.getElementById('wiki-settings')?.addEventListener('click', openAbout);
+            hostDocument.getElementById('wiki-style')?.addEventListener('click', openTermStyles);
         }
         hostWindow.addEventListener('pagehide', cleanup);
         enhanceAllMessages();
